@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.example.android.bluetoothchat;
+package ru.clevertec.AQS.monitor;
 
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
@@ -32,7 +32,7 @@ import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import com.example.android.common.logger.Log;
+import ru.clevertec.AQS.common.logger.Log;
 
 import java.util.Set;
 

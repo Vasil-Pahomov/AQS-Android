@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.example.android.bluetoothchat;
+package ru.clevertec.AQS.monitor;
 
 import android.app.ActionBar;
 import android.app.Activity;
@@ -42,7 +42,7 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.example.android.common.logger.Log;
+import ru.clevertec.AQS.common.logger.Log;
 
 /**
  * This fragment controls Bluetooth to communicate with other devices.
