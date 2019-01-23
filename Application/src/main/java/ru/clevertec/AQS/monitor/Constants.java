@@ -32,4 +32,9 @@ public interface Constants {
     public static final String DEVICE_NAME = "device_name";
     public static final String TOAST = "toast";
 
+    //protocol constants
+    public static final byte SIGN_1ST = (byte)0xDE;
+    public static final byte SIGN_2ND = (byte)0xAF;
+
+
 }

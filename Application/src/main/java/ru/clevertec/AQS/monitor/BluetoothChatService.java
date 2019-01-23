@@ -26,10 +26,13 @@ import android.os.Handler;
 import android.os.Message;
 
 import ru.clevertec.AQS.common.logger.Log;
+import ru.clevertec.AQS.monitor.protocol.Status;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.UUID;
 
 /**
@@ -50,7 +53,7 @@ public class BluetoothChatService {
     private static final UUID MY_UUID_SECURE =
             UUID.fromString("fa87c0d0-afac-11de-8a39-0800200c9a66");
     private static final UUID MY_UUID_INSECURE =
-            UUID.fromString("8ce255c0-200a-11e0-ac64-0800200c9a66");
+            UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     // Member fields
     private final BluetoothAdapter mAdapter;
@@ -398,6 +401,9 @@ public class BluetoothChatService {
             // Get a BluetoothSocket for a connection with the
             // given BluetoothDevice
             try {
+/*                final Method m = device.getClass().getMethod("createInsecureRfcommSocketToServiceRecord", UUID.class);
+                tmp = (BluetoothSocket) m.invoke(device, MY_UUID_INSECURE);*/
+
                 if (secure) {
                     tmp = device.createRfcommSocketToServiceRecord(
                             MY_UUID_SECURE);
@@ -405,7 +411,7 @@ public class BluetoothChatService {
                     tmp = device.createInsecureRfcommSocketToServiceRecord(
                             MY_UUID_INSECURE);
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
                 Log.e(TAG, "Socket Type: " + mSocketType + "create() failed", e);
             }
             mmSocket = tmp;
@@ -426,6 +432,7 @@ public class BluetoothChatService {
                 mmSocket.connect();
             } catch (IOException e) {
                 // Close the socket
+                Log.e(TAG, "error connecting", e);
                 try {
                     mmSocket.close();
                 } catch (IOException e2) {
@@ -463,6 +470,10 @@ public class BluetoothChatService {
         private final InputStream mmInStream;
         private final OutputStream mmOutStream;
 
+        private final byte[] mmRecBuf = new byte[23];
+        private int mmRecBufLen = 0;
+        private long lastReadMillis = System.currentTimeMillis();
+
         public ConnectedThread(BluetoothSocket socket, String socketType) {
             Log.d(TAG, "create ConnectedThread: " + socketType);
             mmSocket = socket;
@@ -492,10 +503,40 @@ public class BluetoothChatService {
                 try {
                     // Read from the InputStream
                     bytes = mmInStream.read(buffer);
+                    Log.d(TAG, String.format("%d bytes received", bytes));
 
-                    // Send the obtained bytes to the UI Activity
-                    mHandler.obtainMessage(Constants.MESSAGE_READ, bytes, -1, buffer)
-                            .sendToTarget();
+                    if (mmRecBufLen != 0 && (System.currentTimeMillis() - lastReadMillis) > 2000) {
+                        //reading timeout - discard what was received previously and start over
+                        mmRecBufLen = 0;
+                    }
+
+                    if (mmRecBufLen != 0) {
+                        //there's something in the receive buffer - assume we're receiving the rest of the request
+                        System.arraycopy(buffer, 0, mmRecBuf, mmRecBufLen, bytes);
+                        mmRecBufLen += bytes;
+                    } else {
+                        //look for signature in the data received and start receiving the command
+                        for (int i = 0; i < bytes - 1; i++) {
+                            if (buffer[i] == Constants.SIGN_1ST && buffer[i + 1] == Constants.SIGN_2ND) {
+                                System.arraycopy(buffer, i + 2, mmRecBuf, 0, bytes - 2 - i);
+                                mmRecBufLen = bytes - 2 - i;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (mmRecBufLen >= 21)
+                    {
+                        //the command has been received - handle it
+                        handleCommand();
+                        if (mmRecBufLen > 21) {
+                            Log.w(TAG, String.format("Buffer exceeds command length by %d bytes, total buffer is %s", mmRecBufLen-21, Arrays.toString(mmRecBuf)));
+                        }
+                        mmRecBufLen = 0;
+                    }
+
+                    lastReadMillis = System.currentTimeMillis();
+
                 } catch (IOException e) {
                     Log.e(TAG, "disconnected", e);
                     connectionLost();
@@ -504,6 +545,18 @@ public class BluetoothChatService {
             }
         }
 
+        private void handleCommand() {
+            switch (mmRecBuf[0]) {
+                case 0: //status command
+                    // Send the obtained bytes to the UI Activity
+                    Status s = new Status(mmRecBuf,1);
+                    mHandler.obtainMessage(Constants.MESSAGE_READ, s)
+                            .sendToTarget();
+
+                break;
+            }
+
+        }
         /**
          * Write to the connected OutStream.
          *

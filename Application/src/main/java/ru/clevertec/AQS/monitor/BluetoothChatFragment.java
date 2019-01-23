@@ -43,6 +43,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import ru.clevertec.AQS.common.logger.Log;
+import ru.clevertec.AQS.monitor.protocol.Status;
 
 /**
  * This fragment controls Bluetooth to communicate with other devices.
@@ -302,9 +303,9 @@ public class BluetoothChatFragment extends Fragment {
                     mConversationArrayAdapter.add("Me:  " + writeMessage);
                     break;
                 case Constants.MESSAGE_READ:
-                    byte[] readBuf = (byte[]) msg.obj;
+                    Status s = (Status) msg.obj;
                     // construct a string from the valid bytes in the buffer
-                    String readMessage = new String(readBuf, 0, msg.arg1);
+                    String readMessage = String.format("T=%f C, H=%f%%", s.getData().getTemperature(), s.getData().getHumidity());
                     mConversationArrayAdapter.add(mConnectedDeviceName + ":  " + readMessage);
                     break;
                 case Constants.MESSAGE_DEVICE_NAME:
