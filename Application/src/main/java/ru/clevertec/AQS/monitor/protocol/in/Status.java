@@ -1,7 +1,9 @@
-package ru.clevertec.AQS.monitor.protocol;
+package ru.clevertec.AQS.monitor.protocol.in;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+
+import ru.clevertec.AQS.monitor.protocol.Data;
 
 public class Status {
 

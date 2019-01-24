@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package ru.clevertec.AQS.monitor;
+package ru.clevertec.AQS.monitor.protocol.service;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -26,13 +26,17 @@ import android.os.Handler;
 import android.os.Message;
 
 import ru.clevertec.AQS.common.logger.Log;
-import ru.clevertec.AQS.monitor.protocol.Status;
+import ru.clevertec.AQS.monitor.Constants;
+import ru.clevertec.AQS.monitor.protocol.in.Status;
+import ru.clevertec.AQS.monitor.protocol.out.Sync;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.Timer;
 import java.util.UUID;
 
 /**
@@ -256,7 +260,10 @@ public class BluetoothChatService {
             r = mConnectedThread;
         }
         // Perform the write unsynchronized
-        r.write(out);
+        if (out[0] == '0') {
+            r.write(new Sync().getBytes());
+        }
+
     }
 
     /**
@@ -472,7 +479,7 @@ public class BluetoothChatService {
 
         private final byte[] mmRecBuf = new byte[23];
         private int mmRecBufLen = 0;
-        private long lastReadMillis = System.currentTimeMillis();
+        private long lastReadMillis;
 
         public ConnectedThread(BluetoothSocket socket, String socketType) {
             Log.d(TAG, "create ConnectedThread: " + socketType);
@@ -491,6 +498,7 @@ public class BluetoothChatService {
             mmInStream = tmpIn;
             mmOutStream = tmpOut;
             mState = STATE_CONNECTED;
+            lastReadMillis = System.currentTimeMillis();
         }
 
         public void run() {
@@ -503,7 +511,6 @@ public class BluetoothChatService {
                 try {
                     // Read from the InputStream
                     bytes = mmInStream.read(buffer);
-                    Log.d(TAG, String.format("%d bytes received", bytes));
 
                     if (mmRecBufLen != 0 && (System.currentTimeMillis() - lastReadMillis) > 2000) {
                         //reading timeout - discard what was received previously and start over
@@ -548,7 +555,6 @@ public class BluetoothChatService {
         private void handleCommand() {
             switch (mmRecBuf[0]) {
                 case 0: //status command
-                    // Send the obtained bytes to the UI Activity
                     Status s = new Status(mmRecBuf,1);
                     mHandler.obtainMessage(Constants.MESSAGE_READ, s)
                             .sendToTarget();

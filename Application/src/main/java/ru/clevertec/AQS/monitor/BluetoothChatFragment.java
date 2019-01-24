@@ -43,7 +43,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import ru.clevertec.AQS.common.logger.Log;
-import ru.clevertec.AQS.monitor.protocol.Status;
+import ru.clevertec.AQS.monitor.protocol.in.Status;
+import ru.clevertec.AQS.monitor.protocol.service.BluetoothChatService;
 
 /**
  * This fragment controls Bluetooth to communicate with other devices.

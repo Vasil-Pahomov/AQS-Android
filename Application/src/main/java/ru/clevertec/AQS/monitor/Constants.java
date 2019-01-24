@@ -16,6 +16,8 @@
 
 package ru.clevertec.AQS.monitor;
 
+import ru.clevertec.AQS.monitor.protocol.service.BluetoothChatService;
+
 /**
  * Defines several constants used between {@link BluetoothChatService} and the UI.
  */
