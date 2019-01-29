@@ -43,6 +43,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import ru.clevertec.AQS.common.logger.Log;
+import ru.clevertec.AQS.monitor.protocol.Data;
+import ru.clevertec.AQS.monitor.protocol.in.DataTransfer;
 import ru.clevertec.AQS.monitor.protocol.in.Status;
 import ru.clevertec.AQS.monitor.protocol.service.BluetoothChatService;
 
@@ -304,10 +306,16 @@ public class BluetoothChatFragment extends Fragment {
                     mConversationArrayAdapter.add("Me:  " + writeMessage);
                     break;
                 case Constants.MESSAGE_READ:
-                    Status s = (Status) msg.obj;
-                    // construct a string from the valid bytes in the buffer
-                    String readMessage = String.format("T=%f C, H=%f%%", s.getData().getTemperature(), s.getData().getHumidity());
-                    mConversationArrayAdapter.add(mConnectedDeviceName + ":  " + readMessage);
+                    if (msg.obj instanceof Status) {
+                        Status s = (Status) msg.obj;
+                        // construct a string from the valid bytes in the buffer
+                        String readMessage = String.format("T=%f C, H=%f%%", s.getData().getTemperature(), s.getData().getHumidity());
+                        mConversationArrayAdapter.add(mConnectedDeviceName + ":  " + readMessage);
+                    } else if (msg.obj instanceof DataTransfer) {
+                        DataTransfer d  = (DataTransfer)msg.obj;
+                        String readMessage = String.format("Data: %d items", d.getData().length);
+                        mConversationArrayAdapter.add(mConnectedDeviceName + ":  " + readMessage);
+                    }
                     break;
                 case Constants.MESSAGE_DEVICE_NAME:
                     // save the connected device's name

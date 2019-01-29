@@ -4,6 +4,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 public class Data {
+
+    public static final int DataLength = 14;
+
     private int temp;
     private int hum;
     private int co2;

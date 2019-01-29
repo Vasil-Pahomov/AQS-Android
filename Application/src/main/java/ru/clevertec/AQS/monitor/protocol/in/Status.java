@@ -5,20 +5,26 @@ import java.nio.ByteOrder;
 
 import ru.clevertec.AQS.monitor.protocol.Data;
 
-public class Status {
+public class Status extends InCommand {
 
     private byte stat;
     private byte bat;
     private long logidx;
     private Data data;
 
-    public Status(byte[] buffer, int pos) {
-        ByteBuffer bb = ByteBuffer.wrap(buffer, pos, buffer.length-pos);
+    @Override
+    public int getCommandLength(byte[] buffer) {
+        return 6 + Data.DataLength;
+    }
+
+    public void Parse(byte[] buffer) {
+        ByteBuffer bb = ByteBuffer.wrap(buffer);
         bb.order(ByteOrder.LITTLE_ENDIAN);
+        bb.get();;//skip command code
         stat = bb.get();
         bat = bb.get();
         logidx = bb.getLong();
-        data = new Data(buffer, pos + 6);
+        data = new Data(buffer, 7);
     }
 
     public Data getData() {

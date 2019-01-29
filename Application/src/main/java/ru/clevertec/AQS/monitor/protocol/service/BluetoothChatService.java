@@ -27,7 +27,11 @@ import android.os.Message;
 
 import ru.clevertec.AQS.common.logger.Log;
 import ru.clevertec.AQS.monitor.Constants;
+import ru.clevertec.AQS.monitor.protocol.in.InCommand;
+import ru.clevertec.AQS.monitor.protocol.in.InCommandFactory;
 import ru.clevertec.AQS.monitor.protocol.in.Status;
+import ru.clevertec.AQS.monitor.protocol.out.ReadData;
+import ru.clevertec.AQS.monitor.protocol.out.ResetStorage;
 import ru.clevertec.AQS.monitor.protocol.out.Sync;
 
 import java.io.IOException;
@@ -262,6 +266,10 @@ public class BluetoothChatService {
         // Perform the write unsynchronized
         if (out[0] == '0') {
             r.write(new Sync().getBytes());
+        } else if(out[0] == '1') {
+            r.write(new ReadData(4,11).getBytes());
+        } else if (out[0] == 'r') {
+            r.write(new ResetStorage().getBytes());
         }
 
     }
@@ -477,7 +485,7 @@ public class BluetoothChatService {
         private final InputStream mmInStream;
         private final OutputStream mmOutStream;
 
-        private final byte[] mmRecBuf = new byte[23];
+        private final byte[] mmRecBuf = new byte[10240];
         private int mmRecBufLen = 0;
         private long lastReadMillis;
 
@@ -503,7 +511,7 @@ public class BluetoothChatService {
 
         public void run() {
             Log.i(TAG, "BEGIN mConnectedThread");
-            byte[] buffer = new byte[1024];
+            byte[] buffer = new byte[10240];
             int bytes;
 
             // Keep listening to the InputStream while connected
@@ -511,14 +519,18 @@ public class BluetoothChatService {
                 try {
                     // Read from the InputStream
                     bytes = mmInStream.read(buffer);
+                    Log.d(TAG, String.format("received %d bytes: %s",bytes, Arrays.toString(Arrays.copyOf(buffer, bytes))));
+
 
                     if (mmRecBufLen != 0 && (System.currentTimeMillis() - lastReadMillis) > 2000) {
+                        Log.w(TAG, String.format("receive timeout at buf=%d",mmRecBufLen));
                         //reading timeout - discard what was received previously and start over
                         mmRecBufLen = 0;
                     }
 
                     if (mmRecBufLen != 0) {
                         //there's something in the receive buffer - assume we're receiving the rest of the request
+                        Log.d(TAG, String.format("appending at pos %d, total buffer length=%d",mmRecBufLen,bytes+mmRecBufLen));
                         System.arraycopy(buffer, 0, mmRecBuf, mmRecBufLen, bytes);
                         mmRecBufLen += bytes;
                     } else {
@@ -527,19 +539,21 @@ public class BluetoothChatService {
                             if (buffer[i] == Constants.SIGN_1ST && buffer[i + 1] == Constants.SIGN_2ND) {
                                 System.arraycopy(buffer, i + 2, mmRecBuf, 0, bytes - 2 - i);
                                 mmRecBufLen = bytes - 2 - i;
+                                Log.d(TAG, String.format("signature found at %d, buffer length=%d",i,mmRecBufLen));
                                 break;
                             }
                         }
+                        if (mmRecBufLen == 0) {
+                            Log.w(TAG, String.format("signature not found, data=%s", Arrays.toString(Arrays.copyOf(buffer, bytes))));
+                        }
                     }
 
-                    if (mmRecBufLen >= 21)
+                    if (mmRecBufLen >= 4)
                     {
-                        //the command has been received - handle it
-                        handleCommand();
-                        if (mmRecBufLen > 21) {
-                            Log.w(TAG, String.format("Buffer exceeds command length by %d bytes, total buffer is %s", mmRecBufLen-21, Arrays.toString(mmRecBuf)));
+                        //the beginning of the command has been received - handle it
+                        if (handleCommand()) {
+                            mmRecBufLen = 0;
                         }
-                        mmRecBufLen = 0;
                     }
 
                     lastReadMillis = System.currentTimeMillis();
@@ -552,17 +566,36 @@ public class BluetoothChatService {
             }
         }
 
-        private void handleCommand() {
-            switch (mmRecBuf[0]) {
-                case 0: //status command
-                    Status s = new Status(mmRecBuf,1);
-                    mHandler.obtainMessage(Constants.MESSAGE_READ, s)
-                            .sendToTarget();
-
-                break;
+        /**
+         * Tries to handle the command in the buffer
+         * @return true, if the command has been handled someway, false otherwise (command hasn't been fully received yet)
+         */
+        private boolean handleCommand() {
+            InCommand incmd = InCommandFactory.getCommand(mmRecBuf);
+            if (incmd == null) {
+                Log.w(TAG, String.format("Unknown command code: %d", mmRecBuf[0]));
+                return true;
             }
-
+            int commandLength = incmd.getCommandLength(mmRecBuf);
+            Log.d(TAG, String.format("Received command %s, length=%d", incmd.getClass().getSimpleName(), commandLength));
+            if (mmRecBufLen > commandLength) {
+                if (mmRecBufLen > (commandLength+1)) {
+                    Log.w(TAG, String.format("Buffer exceeds command length by %d bytes, total buffer is %s", mmRecBufLen-commandLength, Arrays.toString(mmRecBuf)));
+                }
+                Log.d(TAG, String.format("Parsing command", incmd.getClass().getSimpleName()));
+                incmd.Parse(mmRecBuf);
+                processCommand(incmd);
+                return true;
+            } else {
+                Log.d(TAG, String.format("Command still incomplete", incmd.getClass().getSimpleName()));
+                return false;
+            }
         }
+
+        private void processCommand(InCommand incmd) {
+            mHandler.obtainMessage(Constants.MESSAGE_READ, incmd).sendToTarget();
+        }
+
         /**
          * Write to the connected OutStream.
          *
