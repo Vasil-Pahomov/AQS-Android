@@ -21,6 +21,7 @@ import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -42,11 +43,33 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.components.AxisBase;
+import com.github.mikephil.charting.components.Description;
+import com.github.mikephil.charting.components.Legend;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.components.YAxis;
+import com.github.mikephil.charting.data.Entry;
+import com.github.mikephil.charting.data.LineData;
+import com.github.mikephil.charting.data.LineDataSet;
+import com.github.mikephil.charting.formatter.IAxisValueFormatter;
+
+import org.w3c.dom.Text;
+
+import java.sql.Time;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.TimeZone;
+
+import ru.clevertec.AQS.common.AppStorage;
 import ru.clevertec.AQS.common.logger.Log;
-import ru.clevertec.AQS.monitor.protocol.Data;
 import ru.clevertec.AQS.monitor.protocol.in.DataTransfer;
 import ru.clevertec.AQS.monitor.protocol.in.Status;
 import ru.clevertec.AQS.monitor.protocol.service.BluetoothChatService;
+import ru.clevertec.AQS.storage.DLog;
+import ru.clevertec.AQS.storage.Database;
 
 /**
  * This fragment controls Bluetooth to communicate with other devices.
@@ -64,21 +87,14 @@ public class BluetoothChatFragment extends Fragment {
     private ListView mConversationView;
     private EditText mOutEditText;
     private Button mSendButton;
+    private LineChart mChart;
+    private Button mPrevButton, mZoomMinusButton, mUpdateButton, mZoomPlusButton, mNextButton,mSyncButton, mReadButton;
+    private TextView mStatusTextView;
 
     /**
      * Name of the connected device
      */
     private String mConnectedDeviceName = null;
-
-    /**
-     * Array adapter for the conversation thread
-     */
-    private ArrayAdapter<String> mConversationArrayAdapter;
-
-    /**
-     * String buffer for outgoing messages
-     */
-    private StringBuffer mOutStringBuffer;
 
     /**
      * Local Bluetooth adapter
@@ -89,6 +105,10 @@ public class BluetoothChatFragment extends Fragment {
      * Member object for the chat services
      */
     private BluetoothChatService mChatService = null;
+
+    ChartSpan mChartSpan = ChartSpan.MINUTE;
+
+    private long mChartEndSec;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -118,6 +138,13 @@ public class BluetoothChatFragment extends Fragment {
         } else if (mChatService == null) {
             setupChat();
         }
+
+        mChartEndSec = (System.currentTimeMillis() + TimeZone.getDefault().getRawOffset() + TimeZone.getDefault().getDSTSavings()) / 1000;
+
+        setUpChartButtonHandlers();
+        setUpCommandButtonHandlers();
+
+        updateChart();
     }
 
     @Override
@@ -152,9 +179,87 @@ public class BluetoothChatFragment extends Fragment {
 
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
-        mConversationView = (ListView) view.findViewById(R.id.in);
-        mOutEditText = (EditText) view.findViewById(R.id.edit_text_out);
-        mSendButton = (Button) view.findViewById(R.id.button_send);
+        mChart = (LineChart) view.findViewById(R.id.chart);
+
+        mPrevButton = (Button) view.findViewById(R.id.btnPrev);
+        mZoomMinusButton = (Button) view.findViewById(R.id.btnZoomMinus);
+        mUpdateButton = (Button) view.findViewById(R.id.btnUpdate);
+        mZoomPlusButton = (Button) view.findViewById(R.id.btnZoomPlus);
+        mNextButton = (Button) view.findViewById(R.id.btnNext);
+
+        mSyncButton = (Button) view.findViewById(R.id.btnSync);
+        mReadButton = (Button) view.findViewById(R.id.btnRead);
+
+        mStatusTextView = (TextView) view.findViewById(R.id.textViewStatus);
+    }
+
+    private void setUpChartButtonHandlers() {
+        mUpdateButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                updateChart();
+            }
+        });
+        mPrevButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mChartEndSec -= mChartSpan.getGranularitySec()*2;
+                updateChart();
+            }
+        });
+        mNextButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mChartEndSec += mChartSpan.getGranularitySec()*2;
+                updateChart();
+            }
+        });
+        mZoomMinusButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mChartSpan = mChartSpan.getNext();
+                updateChart();
+            }
+        });
+        mZoomPlusButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mChartSpan = mChartSpan.getPrev();
+                updateChart();
+            }
+        });
+
+    }
+
+    private boolean checkConnectionAndInform() {
+        // Check that we're actually connected before trying anything
+        if (mChatService.getState() != BluetoothChatService.STATE_CONNECTED) {
+            Toast.makeText(getActivity(), R.string.not_connected, Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        return true;
+
+    }
+    private void setUpCommandButtonHandlers() {
+
+        mSyncButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (checkConnectionAndInform()) {
+                    mChatService.sync();
+                    Toast.makeText(getContext(), R.string.sent_sync, Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+
+        mReadButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (checkConnectionAndInform()) {
+                    mChatService.readData();
+                }
+            }
+        });
     }
 
     /**
@@ -163,32 +268,8 @@ public class BluetoothChatFragment extends Fragment {
     private void setupChat() {
         Log.d(TAG, "setupChat()");
 
-        // Initialize the array adapter for the conversation thread
-        mConversationArrayAdapter = new ArrayAdapter<String>(getActivity(), R.layout.message);
-
-        mConversationView.setAdapter(mConversationArrayAdapter);
-
-        // Initialize the compose field with a listener for the return key
-        mOutEditText.setOnEditorActionListener(mWriteListener);
-
-        // Initialize the send button with a listener that for click events
-        mSendButton.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                // Send a message using content of the edit text widget
-                View view = getView();
-                if (null != view) {
-                    TextView textView = (TextView) view.findViewById(R.id.edit_text_out);
-                    String message = textView.getText().toString();
-                    sendMessage(message);
-                }
-            }
-        });
-
         // Initialize the BluetoothChatService to perform bluetooth connections
         mChatService = new BluetoothChatService(getActivity(), mHandler);
-
-        // Initialize the buffer for outgoing messages
-        mOutStringBuffer = new StringBuffer("");
     }
 
     /**
@@ -202,45 +283,6 @@ public class BluetoothChatFragment extends Fragment {
             startActivity(discoverableIntent);
         }
     }
-
-    /**
-     * Sends a message.
-     *
-     * @param message A string of text to send.
-     */
-    private void sendMessage(String message) {
-        // Check that we're actually connected before trying anything
-        if (mChatService.getState() != BluetoothChatService.STATE_CONNECTED) {
-            Toast.makeText(getActivity(), R.string.not_connected, Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        // Check that there's actually something to send
-        if (message.length() > 0) {
-            // Get the message bytes and tell the BluetoothChatService to write
-            byte[] send = message.getBytes();
-            mChatService.write(send);
-
-            // Reset out string buffer to zero and clear the edit text field
-            mOutStringBuffer.setLength(0);
-            mOutEditText.setText(mOutStringBuffer);
-        }
-    }
-
-    /**
-     * The action listener for the EditText widget, to listen for the return key
-     */
-    private TextView.OnEditorActionListener mWriteListener
-            = new TextView.OnEditorActionListener() {
-        public boolean onEditorAction(TextView view, int actionId, KeyEvent event) {
-            // If the action is a key-up event on the return key, send the message
-            if (actionId == EditorInfo.IME_NULL && event.getAction() == KeyEvent.ACTION_UP) {
-                String message = view.getText().toString();
-                sendMessage(message);
-            }
-            return true;
-        }
-    };
 
     /**
      * Updates the status on the action bar.
@@ -288,7 +330,6 @@ public class BluetoothChatFragment extends Fragment {
                     switch (msg.arg1) {
                         case BluetoothChatService.STATE_CONNECTED:
                             setStatus(getString(R.string.title_connected_to, mConnectedDeviceName));
-                            mConversationArrayAdapter.clear();
                             break;
                         case BluetoothChatService.STATE_CONNECTING:
                             setStatus(R.string.title_connecting);
@@ -303,18 +344,20 @@ public class BluetoothChatFragment extends Fragment {
                     byte[] writeBuf = (byte[]) msg.obj;
                     // construct a string from the buffer
                     String writeMessage = new String(writeBuf);
-                    mConversationArrayAdapter.add("Me:  " + writeMessage);
+                    Toast.makeText(getContext(), "Me:  " + writeMessage, Toast.LENGTH_LONG).show();
                     break;
                 case Constants.MESSAGE_READ:
                     if (msg.obj instanceof Status) {
                         Status s = (Status) msg.obj;
                         // construct a string from the valid bytes in the buffer
-                        String readMessage = String.format("T=%f C, H=%f%%", s.getData().getTemperature(), s.getData().getHumidity());
-                        mConversationArrayAdapter.add(mConnectedDeviceName + ":  " + readMessage);
+                        String readMessage = String.format("%.2fC %.2f%% L%d", s.getData().getTemperature(), s.getData().getHumidity(), s.getLogIdx());
+                        mStatusTextView.setText(readMessage);
+                        AppStorage.setLastLogIndex(getContext(), s.getLogIdx());
                     } else if (msg.obj instanceof DataTransfer) {
                         DataTransfer d  = (DataTransfer)msg.obj;
-                        String readMessage = String.format("Data: %d items", d.getData().length);
-                        mConversationArrayAdapter.add(mConnectedDeviceName + ":  " + readMessage);
+                        //todo: it's better to move all data handling (including saving data and last indicies) to the service rather than keeping it in the UI
+                        String readMessage = String.format("DLogs: %d-%d (%d)", d.getFromIdx(), d.getToIdx(), d.getDLogs().length);
+                        Toast.makeText(getContext(), readMessage, Toast.LENGTH_LONG).show();
                     }
                     break;
                 case Constants.MESSAGE_DEVICE_NAME:
@@ -405,8 +448,109 @@ public class BluetoothChatFragment extends Fragment {
                 ensureDiscoverable();
                 return true;
             }
+            case R.id.command_reset_local_storage: {
+                mChatService.resetLocalStorage();
+                return true;
+            }
+            case R.id.command_reset_sensor_storage: {
+                mChatService.resetLocalStorage();
+                mChatService.resetStorage();
+                return true;
+            }
         }
         return false;
+    }
+
+    public void updateChart() {
+        XAxis xAxis = mChart.getXAxis();
+
+        mChartEndSec = mChartSpan.adjustTimeSec(mChartEndSec);
+
+        xAxis.setAxisMinimum(0.0F);
+        xAxis.setAxisMaximum((float)mChartSpan.getSpanSec());
+
+        xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
+        xAxis.setGranularityEnabled(true);
+        xAxis.setGranularity(mChartSpan.getGranularitySec());
+        xAxis.setValueFormatter(new DateTimeAxisValueFormatter(mChartSpan, mChartEndSec-mChartSpan.getSpanSec()));
+
+        List<Entry> entriesL = new ArrayList<>();
+        List<Entry> entriesR = new ArrayList<>();
+
+
+        //todo: shound't be executed on the UI thread...
+        List<DLog> dlogs = Database.getDatabase(getContext()).getDLogDao().getInRange(mChartEndSec-mChartSpan.getSpanSec(), mChartEndSec);
+        for (ru.clevertec.AQS.storage.DLog dlog : dlogs) {
+            float time = dlog.rtime - (mChartEndSec-mChartSpan.getSpanSec());
+            entriesL.add(new Entry(time, dlog.temp));
+            entriesR.add(new Entry(time, dlog.hum));
+        }
+
+        Description desc = new Description();
+
+        desc.setText(new SimpleDateFormat("dd.MM.YYYY").format(new Date(mChartEndSec*1000L)));
+
+        mChart.setDescription(desc);
+
+        LineDataSet dataSetL = new LineDataSet(entriesL,"Temp");
+        dataSetL.setAxisDependency(YAxis.AxisDependency.LEFT);
+        dataSetL.setColor(Color.BLUE);
+        dataSetL.setDrawCircles(false);
+
+        LineDataSet dataSetR = new LineDataSet(entriesR, "Hum");
+        dataSetR.setAxisDependency(YAxis.AxisDependency.RIGHT);
+        dataSetR.setColor(Color.GREEN);
+        dataSetR.setDrawCircles(false);
+
+        LineData data = new LineData(dataSetL);
+        data.addDataSet(dataSetR);
+
+        mChart.setData(data);
+
+        Legend legend = mChart.getLegend();
+        legend.setEnabled(true);
+        legend.setDrawInside(false);
+        legend.setVerticalAlignment(Legend.LegendVerticalAlignment.BOTTOM);
+        legend.setHorizontalAlignment(Legend.LegendHorizontalAlignment.LEFT);
+
+
+        mChart.invalidate();
+    }
+
+    public class DateTimeAxisValueFormatter implements IAxisValueFormatter {
+
+        private SimpleDateFormat dateFormat;
+
+        private long baseTimeSec;
+
+        public DateTimeAxisValueFormatter(ChartSpan span, long baseTimeSec) {
+            switch (span) {
+                case MINUTE:
+                case FIVE_MINUTES:
+                    dateFormat = new java.text.SimpleDateFormat("HH:mm:ss");
+                    break;
+                case HALF_HOUR:
+                case HOUR:
+                case EIGHT_HOURS:
+                    dateFormat = new java.text.SimpleDateFormat("HH:mm");
+                    dateFormat = new java.text.SimpleDateFormat("HH:mm");
+                    break;
+                case DAY:
+                    dateFormat = new java.text.SimpleDateFormat("dd.MM HH");
+                case WEEK:
+                    dateFormat = new java.text.SimpleDateFormat("dd.MM");
+                    break;
+            }
+            this.baseTimeSec = baseTimeSec;
+            dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+        }
+
+        @Override
+        public String getFormattedValue(float value, AxisBase axis) {
+            // "value" represents the position of the label on the axis (x or y)
+            return dateFormat.format(new Date(1000L*(baseTimeSec + (long)value)));
+        }
+
     }
 
 }

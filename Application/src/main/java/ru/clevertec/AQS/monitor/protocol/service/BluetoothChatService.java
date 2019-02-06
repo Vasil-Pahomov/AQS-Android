@@ -25,22 +25,23 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 
+import ru.clevertec.AQS.common.AppStorage;
 import ru.clevertec.AQS.common.logger.Log;
 import ru.clevertec.AQS.monitor.Constants;
+import ru.clevertec.AQS.monitor.protocol.DLog;
+import ru.clevertec.AQS.monitor.protocol.in.DataTransfer;
 import ru.clevertec.AQS.monitor.protocol.in.InCommand;
 import ru.clevertec.AQS.monitor.protocol.in.InCommandFactory;
-import ru.clevertec.AQS.monitor.protocol.in.Status;
 import ru.clevertec.AQS.monitor.protocol.out.ReadData;
 import ru.clevertec.AQS.monitor.protocol.out.ResetStorage;
 import ru.clevertec.AQS.monitor.protocol.out.Sync;
+import ru.clevertec.AQS.storage.Database;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.Arrays;
-import java.util.Timer;
+import java.util.TimeZone;
 import java.util.UUID;
 
 /**
@@ -64,6 +65,7 @@ public class BluetoothChatService {
             UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     // Member fields
+    private final Context mContext;
     private final BluetoothAdapter mAdapter;
     private final Handler mHandler;
     private AcceptThread mSecureAcceptThread;
@@ -86,6 +88,7 @@ public class BluetoothChatService {
      * @param handler A Handler to send messages back to the UI Activity
      */
     public BluetoothChatService(Context context, Handler handler) {
+        mContext = context;
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mState = STATE_NONE;
         mNewState = mState;
@@ -264,14 +267,35 @@ public class BluetoothChatService {
             r = mConnectedThread;
         }
         // Perform the write unsynchronized
-        if (out[0] == '0') {
-            r.write(new Sync().getBytes());
-        } else if(out[0] == '1') {
-            r.write(new ReadData(4,11).getBytes());
-        } else if (out[0] == 'r') {
-            r.write(new ResetStorage().getBytes());
-        }
+        r.write(out);
+    }
 
+    public void sync() {
+        write(new Sync().getBytes());
+    }
+
+    //todo: generalize these "syncronizes" to the ConnectedThread
+    public void readData() {
+        ConnectedThread r;
+        synchronized (this) {
+            if (mState != STATE_CONNECTED) return;
+            r = mConnectedThread;
+        }
+        r.readData();
+    }
+
+    public void resetStorage() {
+        write(new ResetStorage().getBytes());
+    }
+
+    public void resetLocalStorage() {
+        ConnectedThread r;
+        synchronized (this) {
+            if (mState != STATE_CONNECTED) return;
+            r = mConnectedThread;
+        }
+        r.resetLocalStorage();
+        Database.getDatabase(mContext).getDLogDao().wipe();
     }
 
     /**
@@ -311,6 +335,7 @@ public class BluetoothChatService {
         // Start the service over to restart listening mode
         BluetoothChatService.this.start();
     }
+
 
     /**
      * This thread runs while listening for incoming connections. It behaves
@@ -485,7 +510,8 @@ public class BluetoothChatService {
         private final InputStream mmInStream;
         private final OutputStream mmOutStream;
 
-        private final byte[] mmRecBuf = new byte[10240];
+        //todo: think how to avoid such big memory allocation (needed to accumulate data for a day)
+        private final byte[] mmRecBuf = new byte[200000];
         private int mmRecBufLen = 0;
         private long lastReadMillis;
 
@@ -577,12 +603,17 @@ public class BluetoothChatService {
                 return true;
             }
             int commandLength = incmd.getCommandLength(mmRecBuf);
-            Log.d(TAG, String.format("Received command %s, length=%d", incmd.getClass().getSimpleName(), commandLength));
+            if (incmd instanceof DataTransfer) {
+                DataTransfer d = (DataTransfer)incmd;
+                Log.d(TAG, String.format("Received data transfer %d-%d", d.getFromIdx(), d.getToIdx()));
+            } else {
+                Log.d(TAG, String.format("Received command %s, length=%d", incmd.getClass().getSimpleName(), commandLength));
+            }
             if (mmRecBufLen > commandLength) {
                 if (mmRecBufLen > (commandLength+1)) {
                     Log.w(TAG, String.format("Buffer exceeds command length by %d bytes, total buffer is %s", mmRecBufLen-commandLength, Arrays.toString(mmRecBuf)));
                 }
-                Log.d(TAG, String.format("Parsing command", incmd.getClass().getSimpleName()));
+                Log.d(TAG, String.format("Parsing command %s", incmd.getClass().getSimpleName()));
                 incmd.Parse(mmRecBuf);
                 processCommand(incmd);
                 return true;
@@ -593,7 +624,107 @@ public class BluetoothChatService {
         }
 
         private void processCommand(InCommand incmd) {
+            if (incmd instanceof DataTransfer) {
+                saveData((DataTransfer)incmd);
+            }
+
             mHandler.obtainMessage(Constants.MESSAGE_READ, incmd).sendToTarget();
+        }
+
+        public void readData()
+        {
+            int fromIdx = Database.getDatabase(mContext).getDLogDao().getLastId() + 1;
+            int toIdx = AppStorage.getLastLogIndex(mContext);
+            writeCommand(
+                    new ReadData(fromIdx, toIdx).getBytes(),
+                    String.format("Read data %d-%d sent", fromIdx, toIdx));
+        }
+
+        public void resetLocalStorage() {
+            Database.getDatabase(mContext).getDLogDao().wipe();
+        }
+        private void saveData(DataTransfer d) {
+            int timediff = 0;
+            int prevssecs = -1;
+            for (int i=d.getDLogs().length-1; i>=0; i--) {
+                DLog dlog = d.getDLogs()[i];
+                if (dlog.getRTime() != 0) {
+                    int newtimediff = dlog.getRTime() - dlog.getSSecs();
+                    if (timediff != 0 && Math.abs(newtimediff - timediff) > 10) {
+                        Log.w(TAG, String.format("Timediff difference is too big for record at %d", i));
+                    }
+                    timediff = newtimediff;
+                } else {
+                    if (timediff == 0) {
+                        if (prevssecs < 0) {
+                            //if the very last record don't have real time, assume it's synced just now
+                            Log.w(TAG, String.format("No timediff, assuming not syncronized at %d", i));
+                            int offset = TimeZone.getDefault().getRawOffset() + TimeZone.getDefault().getDSTSavings();
+                            int nowSec = (int) (System.currentTimeMillis() + offset) / 1000;
+                            timediff = nowSec - timediff;
+                        } else {
+                            Log.w(TAG, String.format("No timediff at %d", i));
+                        }
+                    }
+                    dlog.setRTime(dlog.getSSecs() + timediff);
+                }
+                if (prevssecs >= 0 && prevssecs > dlog.getSSecs()) {
+                    //since we're going backwards through the records, the ssecs should typically be decreasing
+                    //once it increases, this means we encounter on-off-on transition (that is, the sensor was turned off then back on)
+                    //this resets ssecs to 0, and this means that our calculated timediff value is wrong, so discard it
+                    timediff = 0;
+                }
+                prevssecs = dlog.getSSecs();
+            }
+
+            Database db = Database.getDatabase(mContext);
+            for (int i=0; i<d.getDLogs().length; i++) {
+                DLog dlog = d.getDLogs()[i];
+                if (dlog.getRTime() >= 1548000000) { //do not write records with incorrect rtime
+                    db.getDLogDao().insertAll(new ru.clevertec.AQS.storage.DLog().fillFromProtocol(d.getFromIdx() + i, dlog));
+                }
+            }
+
+/*          //todo: remove this code for saving to plain files, and don't forget to remove the permission from the manifest
+            File exst = Environment.getExternalStorageDirectory();
+            File dir = new File(exst.getAbsolutePath()+ "/AQS/");
+            if (!dir.exists()) {
+                if (!dir.mkdirs()) {
+                    Log.e(TAG, String.format("Directory %s not created for file", dir.getAbsolutePath()));
+                    return;
+                }
+            }
+            String filename = String.format("%06d-%06d", d.getFromIdx(), d.getToIdx());
+            File file = new File(dir, filename);
+            try {
+                file.createNewFile();
+                FileOutputStream fOut = new FileOutputStream(file);
+                OutputStreamWriter writer = new OutputStreamWriter(fOut);
+                SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                for (int i=0; i<d.getDLogs().length; i++) {
+                    DLog dlog = d.getDLogs()[i];
+                    if (dlog.getRTime() >= 1548000000) { //do not write records with incorrect rtime
+                        String str = String.format("%s\t%.2f\t%.2f\t%d\t%d\t%d\t%d\t%d\r\n",
+                                sdf.format(new Date(dlog.getRTime() * 1000L)),
+                                dlog.getData().getTemperature(),
+                                dlog.getData().getHumidity(),
+                                dlog.getData().getCO2(),
+                                dlog.getData().getTVOC(),
+                                dlog.getData().getPM1(),
+                                dlog.getData().getPM25(),
+                                dlog.getData().getPM10());
+                        writer.append(str);
+                    }
+                }
+                writer.close();
+                fOut.flush();
+                fOut.close();
+
+            } catch (IOException e) {
+                Log.e(TAG, String.format("Can't write to file %s in %s", filename, dir.getAbsolutePath()), e);
+            }
+            */
         }
 
         /**
@@ -613,6 +744,16 @@ public class BluetoothChatService {
             }
         }
 
+        public void writeCommand(byte[] buffer, String infoMessage) {
+            try {
+                mmOutStream.write(buffer);
+                mHandler.obtainMessage(Constants.MESSAGE_WRITE, -1, -1, infoMessage.getBytes())
+                        .sendToTarget();
+            } catch (IOException e) {
+                Log.e(TAG, "Exception during writing the command", e);
+            }
+        }
+
         public void cancel() {
             try {
                 mmSocket.close();
@@ -620,5 +761,6 @@ public class BluetoothChatService {
                 Log.e(TAG, "close() of connect socket failed", e);
             }
         }
+
     }
 }

@@ -18,6 +18,14 @@ public class Data {
     public Data(byte[] buffer, int pos) {
         ByteBuffer bb = ByteBuffer.wrap(buffer, pos, buffer.length-pos);
         bb.order(ByteOrder.LITTLE_ENDIAN);
+        FillFromByteBuffer(bb);
+    }
+
+    public Data(ByteBuffer bb) {
+        FillFromByteBuffer(bb);
+    }
+
+    private void FillFromByteBuffer(ByteBuffer bb) {
         temp = bb.getShort();
         hum = bb.getShort();
         co2 = bb.getShort();

@@ -9,7 +9,7 @@ public class Status extends InCommand {
 
     private byte stat;
     private byte bat;
-    private long logidx;
+    private int logidx;
     private Data data;
 
     @Override
@@ -23,11 +23,13 @@ public class Status extends InCommand {
         bb.get();;//skip command code
         stat = bb.get();
         bat = bb.get();
-        logidx = bb.getLong();
+        logidx = bb.getInt();
         data = new Data(buffer, 7);
     }
 
     public Data getData() {
         return data;
     }
+
+    public int getLogIdx() { return logidx; }
 }

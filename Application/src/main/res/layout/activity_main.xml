@@ -21,23 +21,23 @@
       android:id="@+id/sample_main_layout">
 
     <ViewAnimator
-          android:id="@+id/sample_output"
-          android:layout_width="match_parent"
-          android:layout_height="0px"
-          android:layout_weight="1">
+        android:id="@+id/sample_output"
+        android:layout_width="match_parent"
+        android:layout_height="0px"
+        android:layout_weight="0">
 
         <ScrollView
-              style="@style/Widget.SampleMessageTile"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent">
+            style="@style/Widget.SampleMessageTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
 
         </ScrollView>
 
         <fragment
-              android:name="ru.clevertec.AQS.common.logger.LogFragment"
-              android:id="@+id/log_fragment"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent" />
+            android:id="@+id/log_fragment"
+            android:name="ru.clevertec.AQS.common.logger.LogFragment"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
 
     </ViewAnimator>
 
