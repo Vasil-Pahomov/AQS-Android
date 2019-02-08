@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="datatype_TEMPERATURE">#00FF00</color>
+    <color name="datatype_HUMIDITY">#6060FF</color>
+    <color name="datatype_CO2">#FF0000</color>
+    <color name="datatype_TVOC">#B0B000</color>
+    <color name="datatype_PM">#000000</color>
+    <color name="datatype_PM1">#505050</color>
+    <color name="datatype_PM25">#707070</color>
+    <color name="datatype_PM10">#909090</color>
+
+</resources>

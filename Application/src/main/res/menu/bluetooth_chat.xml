@@ -42,4 +42,9 @@
         android:showAsAction="never"
         android:title="@string/reset_sensor_storage"/>
 
+    <item
+        android:id="@+id/show_settings_screen"
+        android:showAsAction="never"
+        android:title="@string/settings_title"/>
+
 </menu>

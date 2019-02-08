@@ -43,4 +43,14 @@
     <!-- Toast messages -->
     <string name="sent_sync">Sync command sent</string>
 
+    <!--  DeviceListActivity -->
+    <string name="settings_title">Settings</string>
+
+    <!-- Data types -->
+    <string name="datatype_TEMPERATURE">Temp</string>
+    <string name="datatype_HUMIDITY">Hum</string>
+    <string name="datatype_CO2">CO2</string>
+    <string name="datatype_TVOC">TVOC</string>
+    <string name="datatype_PM">PM</string>
+
 </resources>

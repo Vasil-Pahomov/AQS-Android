@@ -21,22 +21,18 @@ import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
-import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.inputmethod.EditorInfo;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
@@ -54,9 +50,6 @@ import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.data.LineDataSet;
 import com.github.mikephil.charting.formatter.IAxisValueFormatter;
 
-import org.w3c.dom.Text;
-
-import java.sql.Time;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -82,6 +75,7 @@ public class BluetoothChatFragment extends Fragment {
     private static final int REQUEST_CONNECT_DEVICE_SECURE = 1;
     private static final int REQUEST_CONNECT_DEVICE_INSECURE = 2;
     private static final int REQUEST_ENABLE_BT = 3;
+    private static final int REQUEST_CHANGE_SETTINGS = 4;
 
     // Layout Views
     private ListView mConversationView;
@@ -404,6 +398,13 @@ public class BluetoothChatFragment extends Fragment {
                             Toast.LENGTH_SHORT).show();
                     getActivity().finish();
                 }
+                break;
+            case REQUEST_CHANGE_SETTINGS:
+                if (resultCode == Activity.RESULT_OK) {
+                    updateChart();
+                }
+                break;
+
         }
     }
 
@@ -457,6 +458,12 @@ public class BluetoothChatFragment extends Fragment {
                 mChatService.resetStorage();
                 return true;
             }
+            case R.id.show_settings_screen: {
+                // Launch the DeviceListActivity to see devices and do scan
+                Intent serverIntent = new Intent(getActivity(), SettingsActivity.class);
+                startActivityForResult(serverIntent, REQUEST_CHANGE_SETTINGS);
+                return true;
+            }
         }
         return false;
     }
@@ -474,17 +481,101 @@ public class BluetoothChatFragment extends Fragment {
         xAxis.setGranularity(mChartSpan.getGranularitySec());
         xAxis.setValueFormatter(new DateTimeAxisValueFormatter(mChartSpan, mChartEndSec-mChartSpan.getSpanSec()));
 
-        List<Entry> entriesL = new ArrayList<>();
-        List<Entry> entriesR = new ArrayList<>();
+        List<Entry> entriesL1 = new ArrayList<>(),
+                    entriesL2 = new ArrayList<>(),
+                    entriesL3 = new ArrayList<>(),
+                    entriesR1 = new ArrayList<>(),
+                    entriesR2 = new ArrayList<>(),
+                    entriesR3 = new ArrayList<>();
 
 
+        DataType dt1 = AppStorage.getDataType1(getContext());
+        DataType dt2 = AppStorage.getDataType2(getContext());
+
+        float min1 = dt1.getDefaultMinValue(), max1 = dt1.getDefaultMaxValue(), min2 = dt2.getDefaultMinValue(), max2 = dt2.getDefaultMaxValue();
         //todo: shound't be executed on the UI thread...
         List<DLog> dlogs = Database.getDatabase(getContext()).getDLogDao().getInRange(mChartEndSec-mChartSpan.getSpanSec(), mChartEndSec);
         for (ru.clevertec.AQS.storage.DLog dlog : dlogs) {
-            float time = dlog.rtime - (mChartEndSec-mChartSpan.getSpanSec());
-            entriesL.add(new Entry(time, dlog.temp));
-            entriesR.add(new Entry(time, dlog.hum));
+            float time = dlog.rtime - (mChartEndSec - mChartSpan.getSpanSec());
+            Entry e = null,e1 = null,e2 = null;
+            switch (dt1) {
+                case TEMPERATURE:
+                    entriesL1.add(e = new Entry(time, dlog.temp));
+                    break;
+                case HUMIDITY:
+                    entriesL1.add(e = new Entry(time, dlog.hum));
+                    break;
+                case CO2:
+                    entriesL1.add(e = new Entry(time, dlog.co2));
+                    break;
+                case TVOC:
+                    entriesL1.add(e = new Entry(time, dlog.tvoc));
+                    break;
+                case PM:
+                    entriesL1.add(e = new Entry(time, dlog.pm1));
+                    entriesL2.add(e1 = new Entry(time, dlog.pm25));
+                    entriesL3.add(e2 = new Entry(time, dlog.pm10));
+                    break;
+            }
+
+            if (e != null) {
+                if (e.getY() < min1) { min1 = e.getY(); }
+                if (e.getY() > max1) { max1 = e.getY(); }
+            }
+            if (e1 != null) {
+                if (e1.getY() < min1) { min1 = e1.getY(); }
+                if (e1.getY() > max1) { max1 = e1.getY(); }
+            }
+            if (e2 != null) {
+                if (e2.getY() < min1) { min1 = e2.getY(); }
+                if (e2.getY() > max1) { max1 = e2.getY(); }
+            }
+
+            e = null;
+            e1 = null;
+            e2 = null;
+
+            //todo: avoid switch duplication
+            switch (dt2) {
+                case TEMPERATURE:
+                    entriesR1.add(e = new Entry(time, dlog.temp));
+                    break;
+                case HUMIDITY:
+                    entriesR1.add(e = new Entry(time, dlog.hum));
+                    break;
+                case CO2:
+                    entriesR1.add(e = new Entry(time, dlog.co2));
+                    break;
+                case TVOC:
+                    entriesR1.add(e = new Entry(time, dlog.tvoc));
+                    break;
+                case PM:
+                    entriesR1.add(e = new Entry(time, dlog.pm1));
+                    entriesR2.add(e1 = new Entry(time, dlog.pm25));
+                    entriesR3.add(e2 = new Entry(time, dlog.pm10));
+                    break;
+            }
+            if (e != null) {
+                if (e.getY() < min2) { min2 = e.getY(); }
+                if (e.getY() > max2) { max2 = e.getY(); }
+            }
+            if (e1 != null) {
+                if (e1.getY() < min2) { min2 = e1.getY(); }
+                if (e1.getY() > max2) { max2 = e1.getY(); }
+            }
+            if (e2 != null) {
+                if (e2.getY() < min2) { min2 = e2.getY(); }
+                if (e2.getY() > max2) { max2 = e2.getY(); }
+            }
         }
+
+
+        YAxis y1 = mChart.getAxisLeft();
+        y1.setAxisMinimum(min1);
+        y1.setAxisMaximum(max1);
+        YAxis y2 = mChart.getAxisRight();
+        y2.setAxisMinimum(min2);
+        y2.setAxisMaximum(max2);
 
         Description desc = new Description();
 
@@ -492,26 +583,67 @@ public class BluetoothChatFragment extends Fragment {
 
         mChart.setDescription(desc);
 
-        LineDataSet dataSetL = new LineDataSet(entriesL,"Temp");
-        dataSetL.setAxisDependency(YAxis.AxisDependency.LEFT);
-        dataSetL.setColor(Color.BLUE);
-        dataSetL.setDrawCircles(false);
+        LineData data = new LineData();
 
-        LineDataSet dataSetR = new LineDataSet(entriesR, "Hum");
-        dataSetR.setAxisDependency(YAxis.AxisDependency.RIGHT);
-        dataSetR.setColor(Color.GREEN);
-        dataSetR.setDrawCircles(false);
+        //todo: avoid this repeating code
+        if (dt1 == DataType.PM) {
+            LineDataSet dataSetL1 = new LineDataSet(entriesL1,"PM 1");
+            dataSetL1.setAxisDependency(YAxis.AxisDependency.LEFT);
+            dataSetL1.setColor(getResources().getColor(R.color.datatype_PM1));
+            dataSetL1.setDrawCircles(false);
+            data.addDataSet(dataSetL1);
+            LineDataSet dataSetL2 = new LineDataSet(entriesL2, "PM 2.5");
+            dataSetL2.setAxisDependency(YAxis.AxisDependency.LEFT);
+            dataSetL2.setColor(getResources().getColor(R.color.datatype_PM25));
+            dataSetL2.setDrawCircles(false);
+            data.addDataSet(dataSetL2);
+            LineDataSet dataSetL3 = new LineDataSet(entriesL3,"PM 10");
+            dataSetL3.setAxisDependency(YAxis.AxisDependency.LEFT);
+            dataSetL3.setColor(getResources().getColor(R.color.datatype_PM10));
+            dataSetL3.setDrawCircles(false);
+            data.addDataSet(dataSetL3);
+        } else {
+            LineDataSet dataSetL1 = new LineDataSet(entriesL1,dt1.getDisplayName(getContext()));
+            dataSetL1.setAxisDependency(YAxis.AxisDependency.LEFT);
+            dataSetL1.setColor(getResources().getColor(getResources().getIdentifier("datatype_" + dt1.name(), "color", getContext().getPackageName())));
+            dataSetL1.setDrawCircles(false);
+            data.addDataSet(dataSetL1);
+        }
 
-        LineData data = new LineData(dataSetL);
-        data.addDataSet(dataSetR);
+            if (dt2 == DataType.PM) {
+                LineDataSet dataSetL1 = new LineDataSet(entriesR1,"PM 1");
+                dataSetL1.setAxisDependency(YAxis.AxisDependency.RIGHT);
+                dataSetL1.setColor(getResources().getColor(R.color.datatype_PM1));
+                dataSetL1.setDrawCircles(false);
+                data.addDataSet(dataSetL1);
+                LineDataSet dataSetL2 = new LineDataSet(entriesR2, "PM 2.5");
+                dataSetL2.setAxisDependency(YAxis.AxisDependency.RIGHT);
+                dataSetL2.setColor(getResources().getColor(R.color.datatype_PM25));
+                dataSetL2.setDrawCircles(false);
+                data.addDataSet(dataSetL2);
+                LineDataSet dataSetL3 = new LineDataSet(entriesR3,"PM 10");
+                dataSetL3.setAxisDependency(YAxis.AxisDependency.RIGHT);
+                dataSetL3.setColor(getResources().getColor(R.color.datatype_PM10));
+                dataSetL3.setDrawCircles(false);
+                data.addDataSet(dataSetL3);
+            } else {
+                LineDataSet dataSetL1 = new LineDataSet(entriesR1,dt2.getDisplayName(getContext()));
+                dataSetL1.setAxisDependency(YAxis.AxisDependency.RIGHT);
+                dataSetL1.setColor(getResources().getColor(getResources().getIdentifier("datatype_" + dt2.name(), "color", getContext().getPackageName())));
+                dataSetL1.setDrawCircles(false);
+                data.addDataSet(dataSetL1);
+            }
 
-        mChart.setData(data);
+            mChart.setData(data);
 
         Legend legend = mChart.getLegend();
         legend.setEnabled(true);
         legend.setDrawInside(false);
         legend.setVerticalAlignment(Legend.LegendVerticalAlignment.BOTTOM);
         legend.setHorizontalAlignment(Legend.LegendHorizontalAlignment.LEFT);
+
+
+
 
 
         mChart.invalidate();
