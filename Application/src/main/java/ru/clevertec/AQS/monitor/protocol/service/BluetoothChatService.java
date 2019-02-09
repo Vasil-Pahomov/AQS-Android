@@ -26,12 +26,14 @@ import android.os.Handler;
 import android.os.Message;
 
 import ru.clevertec.AQS.common.AppStorage;
+import ru.clevertec.AQS.common.UnixTimeUtils;
 import ru.clevertec.AQS.common.logger.Log;
 import ru.clevertec.AQS.monitor.Constants;
 import ru.clevertec.AQS.monitor.protocol.DLog;
 import ru.clevertec.AQS.monitor.protocol.in.DataTransfer;
 import ru.clevertec.AQS.monitor.protocol.in.InCommand;
 import ru.clevertec.AQS.monitor.protocol.in.InCommandFactory;
+import ru.clevertec.AQS.monitor.protocol.in.Status;
 import ru.clevertec.AQS.monitor.protocol.out.ReadData;
 import ru.clevertec.AQS.monitor.protocol.out.ResetStorage;
 import ru.clevertec.AQS.monitor.protocol.out.Sync;
@@ -626,6 +628,22 @@ public class BluetoothChatService {
         private void processCommand(InCommand incmd) {
             if (incmd instanceof DataTransfer) {
                 saveData((DataTransfer)incmd);
+            } else if (incmd instanceof Status) {
+                Status statusCmd = (Status)incmd;
+                AppStorage.setLastLogIndex(mContext, statusCmd.getLogIdx());
+                Database db = Database.getDatabase(mContext);
+                if (statusCmd.getLogIdx() == db.getDLogDao().getLastId() + 1) {
+                    //we have all previous records stored and now receive the next, just store it
+                    ru.clevertec.AQS.storage.DLog dlogst = new ru.clevertec.AQS.storage.DLog();
+                    dlogst.id = statusCmd.getLogIdx();
+                    dlogst.rtime = UnixTimeUtils.getCurrentUnixTime();
+                    dlogst.fillValuesFromData(statusCmd.getData());
+                    db.getDLogDao().insertAll(dlogst);
+                    mHandler.obtainMessage(Constants.MESSAGE_DATA_UPDATED).sendToTarget();
+                } else {
+                    //we're missing records, request all we're missing
+                    readData();
+                }
             }
 
             mHandler.obtainMessage(Constants.MESSAGE_READ, incmd).sendToTarget();
@@ -643,6 +661,7 @@ public class BluetoothChatService {
         public void resetLocalStorage() {
             Database.getDatabase(mContext).getDLogDao().wipe();
         }
+
         private void saveData(DataTransfer d) {
             int timediff = 0;
             int prevssecs = -1;
@@ -685,46 +704,8 @@ public class BluetoothChatService {
                 }
             }
 
-/*          //todo: remove this code for saving to plain files, and don't forget to remove the permission from the manifest
-            File exst = Environment.getExternalStorageDirectory();
-            File dir = new File(exst.getAbsolutePath()+ "/AQS/");
-            if (!dir.exists()) {
-                if (!dir.mkdirs()) {
-                    Log.e(TAG, String.format("Directory %s not created for file", dir.getAbsolutePath()));
-                    return;
-                }
-            }
-            String filename = String.format("%06d-%06d", d.getFromIdx(), d.getToIdx());
-            File file = new File(dir, filename);
-            try {
-                file.createNewFile();
-                FileOutputStream fOut = new FileOutputStream(file);
-                OutputStreamWriter writer = new OutputStreamWriter(fOut);
-                SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-                for (int i=0; i<d.getDLogs().length; i++) {
-                    DLog dlog = d.getDLogs()[i];
-                    if (dlog.getRTime() >= 1548000000) { //do not write records with incorrect rtime
-                        String str = String.format("%s\t%.2f\t%.2f\t%d\t%d\t%d\t%d\t%d\r\n",
-                                sdf.format(new Date(dlog.getRTime() * 1000L)),
-                                dlog.getData().getTemperature(),
-                                dlog.getData().getHumidity(),
-                                dlog.getData().getCO2(),
-                                dlog.getData().getTVOC(),
-                                dlog.getData().getPM1(),
-                                dlog.getData().getPM25(),
-                                dlog.getData().getPM10());
-                        writer.append(str);
-                    }
-                }
-                writer.close();
-                fOut.flush();
-                fOut.close();
-
-            } catch (IOException e) {
-                Log.e(TAG, String.format("Can't write to file %s in %s", filename, dir.getAbsolutePath()), e);
-            }
-            */
+            Message msg = mHandler.obtainMessage(Constants.MESSAGE_DATA_UPDATED);
+            mHandler.sendMessage(msg);
         }
 
         /**

@@ -14,12 +14,13 @@
      limitations under the License.
 -->
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="AppCompatResource">
 
     <item
         android:id="@+id/insecure_connect_scan"
         android:icon="@drawable/ic_action_device_access_bluetooth_searching"
-        android:showAsAction="ifRoom"
+        android:showAsAction="always"
         android:title="@string/insecure_connect" />
 
     <item
@@ -43,8 +44,8 @@
         android:title="@string/reset_sensor_storage"/>
 
     <item
-        android:id="@+id/show_settings_screen"
-        android:showAsAction="never"
+        android:id="@+id/show_chart_settings_screen"
+        android:showAsAction="always"
         android:title="@string/settings_title"/>
 
 </menu>

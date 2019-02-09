@@ -18,6 +18,6 @@
       xmlns:tools="http://schemas.android.com/tools"
       tools:ignore="AppCompatResource">
     <item android:id="@+id/menu_toggle_log"
-          android:showAsAction="always"
+          android:showAsAction="ifRoom"
           android:title="@string/sample_show_log" />
 </menu>

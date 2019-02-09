@@ -1,7 +1,8 @@
 package ru.clevertec.AQS.monitor.protocol.out;
 
 import java.nio.ByteBuffer;
-import java.util.TimeZone;
+
+import ru.clevertec.AQS.common.UnixTimeUtils;
 
 public class Sync extends OutCommand {
 
@@ -12,8 +13,6 @@ public class Sync extends OutCommand {
 
     @Override
     protected void fillBody(ByteBuffer b) {
-        int offset = TimeZone.getDefault().getRawOffset() + TimeZone.getDefault().getDSTSavings();
-        long now = System.currentTimeMillis() + offset;
-        b.putInt((int)(now/1000));
+        b.putInt(UnixTimeUtils.getCurrentUnixTime());
     }
 }
