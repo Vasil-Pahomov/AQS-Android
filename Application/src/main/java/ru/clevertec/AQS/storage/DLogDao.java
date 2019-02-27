@@ -13,6 +13,9 @@ public interface DLogDao {
     @Query("SELECT * FROM dlog WHERE rtime >= :from AND rtime < :to")
     List<DLog> getInRange(long from, long to);
 
+    @Query("SELECT * FROM dlog")
+    List<DLog> getAll();
+
     @Insert
     void insertAll(DLog... dLogs);
 

@@ -466,6 +466,10 @@ public class BluetoothChatFragment extends Fragment {
                 startActivityForResult(serverIntent, REQUEST_CHANGE_SETTINGS);
                 return true;
             }
+            case R.id.export_to_file: {
+                mChatService.exportToFile();
+                return true;
+            }
         }
         return false;
     }

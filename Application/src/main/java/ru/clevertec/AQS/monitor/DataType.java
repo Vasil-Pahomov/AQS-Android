@@ -42,9 +42,9 @@ public enum DataType {
             case CO2:
                 return 2000F;
             case TVOC:
-                return 50F;
+                return 200F;
             case PM:
-                return 50F;
+                return 200F;
             default:
                 return 1F;
         }
