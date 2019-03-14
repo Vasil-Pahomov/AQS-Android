@@ -470,6 +470,9 @@ public class BluetoothChatFragment extends Fragment {
                 mChatService.exportToFile();
                 return true;
             }
+            case R.id.command_co2_calibrate: {
+                mChatService.calibrateCO2();
+            }
         }
         return false;
     }

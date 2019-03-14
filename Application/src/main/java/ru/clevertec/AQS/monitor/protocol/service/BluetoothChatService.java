@@ -18,7 +18,6 @@ package ru.clevertec.AQS.monitor.protocol.service;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
 import android.os.Bundle;
@@ -35,6 +34,7 @@ import ru.clevertec.AQS.monitor.protocol.in.DataTransfer;
 import ru.clevertec.AQS.monitor.protocol.in.InCommand;
 import ru.clevertec.AQS.monitor.protocol.in.InCommandFactory;
 import ru.clevertec.AQS.monitor.protocol.in.Status;
+import ru.clevertec.AQS.monitor.protocol.out.CalibrateCO2;
 import ru.clevertec.AQS.monitor.protocol.out.ReadData;
 import ru.clevertec.AQS.monitor.protocol.out.ResetStorage;
 import ru.clevertec.AQS.monitor.protocol.out.Sync;
@@ -317,6 +317,10 @@ public class BluetoothChatService {
 
     public void exportToFile() {
         new ExportThread().start();
+    }
+
+    public void calibrateCO2() {
+        write(new CalibrateCO2().getBytes());
     }
 
     /**
@@ -640,6 +644,8 @@ public class BluetoothChatService {
             }
         }
 
+        public void calibrateCO2() {
+        }
     }
 
     private class ExportThread extends Thread {
