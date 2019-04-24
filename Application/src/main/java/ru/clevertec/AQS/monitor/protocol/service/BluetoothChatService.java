@@ -588,7 +588,7 @@ public class BluetoothChatService {
                     }
                     dlog.setRTime(dlog.getSSecs() + timediff);
                 }
-                if (prevssecs >= 0 && prevssecs > dlog.getSSecs()) {
+                if (prevssecs >= 0 && prevssecs < dlog.getSSecs()) {
                     //since we're going backwards through the records, the ssecs should typically be decreasing
                     //once it increases, this means we encounter on-off-on transition (that is, the sensor was turned off then back on)
                     //this resets ssecs to 0, and this means that our calculated timediff value is wrong, so discard it
