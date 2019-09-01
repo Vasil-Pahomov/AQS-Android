@@ -39,6 +39,8 @@
     <string name="discoverable">Make discoverable</string>
     <string name="reset_sensor_storage">Reset sensor storage</string>
     <string name="reset_local_storage">Reset local storage</string>
+    <string name="export_data">Export data</string>
+    <string name="co2_calibrate">Calibrate CO2 at 400 PPM</string>
 
     <!-- Toast messages -->
     <string name="sent_sync">Sync command sent</string>

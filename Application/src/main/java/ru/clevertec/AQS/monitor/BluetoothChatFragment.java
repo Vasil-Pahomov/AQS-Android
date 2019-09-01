@@ -100,7 +100,7 @@ public class BluetoothChatFragment extends Fragment {
      */
     private BluetoothChatService mChatService = null;
 
-    ChartSpan mChartSpan = ChartSpan.MINUTE;
+    ChartSpan mChartSpan = ChartSpan.FIVE_MINUTES;
 
     private long mChartEndSec;
 
@@ -346,7 +346,6 @@ public class BluetoothChatFragment extends Fragment {
                         // construct a string from the valid bytes in the buffer
                         String readMessage = String.format("%.2fC %.2f%% L%d", s.getData().getTemperature(), s.getData().getHumidity(), s.getLogIdx());
                         mStatusTextView.setText(readMessage);
-                        AppStorage.setLastLogIndex(getContext(), s.getLogIdx());
                     } else if (msg.obj instanceof DataTransfer) {
                         DataTransfer d  = (DataTransfer)msg.obj;
                         //todo: it's better to move all data handling (including saving data and last indicies) to the service rather than keeping it in the UI
@@ -367,6 +366,9 @@ public class BluetoothChatFragment extends Fragment {
                         Toast.makeText(activity, msg.getData().getString(Constants.TOAST),
                                 Toast.LENGTH_SHORT).show();
                     }
+                    break;
+                case Constants.MESSAGE_DATA_UPDATED:
+                    updateChart();
                     break;
             }
         }
@@ -458,11 +460,18 @@ public class BluetoothChatFragment extends Fragment {
                 mChatService.resetStorage();
                 return true;
             }
-            case R.id.show_settings_screen: {
+            case R.id.show_chart_settings_screen: {
                 // Launch the DeviceListActivity to see devices and do scan
                 Intent serverIntent = new Intent(getActivity(), SettingsActivity.class);
                 startActivityForResult(serverIntent, REQUEST_CHANGE_SETTINGS);
                 return true;
+            }
+            case R.id.export_to_file: {
+                mChatService.exportToFile();
+                return true;
+            }
+            case R.id.command_co2_calibrate: {
+                mChatService.calibrateCO2();
             }
         }
         return false;
@@ -610,29 +619,29 @@ public class BluetoothChatFragment extends Fragment {
             data.addDataSet(dataSetL1);
         }
 
-            if (dt2 == DataType.PM) {
-                LineDataSet dataSetL1 = new LineDataSet(entriesR1,"PM 1");
-                dataSetL1.setAxisDependency(YAxis.AxisDependency.RIGHT);
-                dataSetL1.setColor(getResources().getColor(R.color.datatype_PM1));
-                dataSetL1.setDrawCircles(false);
-                data.addDataSet(dataSetL1);
-                LineDataSet dataSetL2 = new LineDataSet(entriesR2, "PM 2.5");
-                dataSetL2.setAxisDependency(YAxis.AxisDependency.RIGHT);
-                dataSetL2.setColor(getResources().getColor(R.color.datatype_PM25));
-                dataSetL2.setDrawCircles(false);
-                data.addDataSet(dataSetL2);
-                LineDataSet dataSetL3 = new LineDataSet(entriesR3,"PM 10");
-                dataSetL3.setAxisDependency(YAxis.AxisDependency.RIGHT);
-                dataSetL3.setColor(getResources().getColor(R.color.datatype_PM10));
-                dataSetL3.setDrawCircles(false);
-                data.addDataSet(dataSetL3);
-            } else {
-                LineDataSet dataSetL1 = new LineDataSet(entriesR1,dt2.getDisplayName(getContext()));
-                dataSetL1.setAxisDependency(YAxis.AxisDependency.RIGHT);
-                dataSetL1.setColor(getResources().getColor(getResources().getIdentifier("datatype_" + dt2.name(), "color", getContext().getPackageName())));
-                dataSetL1.setDrawCircles(false);
-                data.addDataSet(dataSetL1);
-            }
+        if (dt2 == DataType.PM) {
+            LineDataSet dataSetL1 = new LineDataSet(entriesR1,"PM 1");
+            dataSetL1.setAxisDependency(YAxis.AxisDependency.RIGHT);
+            dataSetL1.setColor(getResources().getColor(R.color.datatype_PM1));
+            dataSetL1.setDrawCircles(false);
+            data.addDataSet(dataSetL1);
+            LineDataSet dataSetL2 = new LineDataSet(entriesR2, "PM 2.5");
+            dataSetL2.setAxisDependency(YAxis.AxisDependency.RIGHT);
+            dataSetL2.setColor(getResources().getColor(R.color.datatype_PM25));
+            dataSetL2.setDrawCircles(false);
+            data.addDataSet(dataSetL2);
+            LineDataSet dataSetL3 = new LineDataSet(entriesR3,"PM 10");
+            dataSetL3.setAxisDependency(YAxis.AxisDependency.RIGHT);
+            dataSetL3.setColor(getResources().getColor(R.color.datatype_PM10));
+            dataSetL3.setDrawCircles(false);
+            data.addDataSet(dataSetL3);
+        } else {
+            LineDataSet dataSetL1 = new LineDataSet(entriesR1,dt2.getDisplayName(getContext()));
+            dataSetL1.setAxisDependency(YAxis.AxisDependency.RIGHT);
+            dataSetL1.setColor(getResources().getColor(getResources().getIdentifier("datatype_" + dt2.name(), "color", getContext().getPackageName())));
+            dataSetL1.setDrawCircles(false);
+            data.addDataSet(dataSetL1);
+        }
 
             mChart.setData(data);
 
@@ -657,18 +666,19 @@ public class BluetoothChatFragment extends Fragment {
 
         public DateTimeAxisValueFormatter(ChartSpan span, long baseTimeSec) {
             switch (span) {
-                case MINUTE:
                 case FIVE_MINUTES:
                     dateFormat = new java.text.SimpleDateFormat("HH:mm:ss");
                     break;
                 case HALF_HOUR:
                 case HOUR:
-                case EIGHT_HOURS:
+                case FOUR_HOURS:
                     dateFormat = new java.text.SimpleDateFormat("HH:mm");
                     dateFormat = new java.text.SimpleDateFormat("HH:mm");
                     break;
+                case EIGHT_HOURS:
                 case DAY:
-                    dateFormat = new java.text.SimpleDateFormat("dd.MM HH");
+                    dateFormat = new java.text.SimpleDateFormat("dd.MM HHч");
+                    break;
                 case WEEK:
                     dateFormat = new java.text.SimpleDateFormat("dd.MM");
                     break;

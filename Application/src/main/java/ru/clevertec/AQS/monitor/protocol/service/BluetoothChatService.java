@@ -18,29 +18,38 @@ package ru.clevertec.AQS.monitor.protocol.service;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
 
 import ru.clevertec.AQS.common.AppStorage;
+import ru.clevertec.AQS.common.UnixTimeUtils;
 import ru.clevertec.AQS.common.logger.Log;
 import ru.clevertec.AQS.monitor.Constants;
 import ru.clevertec.AQS.monitor.protocol.DLog;
 import ru.clevertec.AQS.monitor.protocol.in.DataTransfer;
 import ru.clevertec.AQS.monitor.protocol.in.InCommand;
 import ru.clevertec.AQS.monitor.protocol.in.InCommandFactory;
+import ru.clevertec.AQS.monitor.protocol.in.Status;
+import ru.clevertec.AQS.monitor.protocol.out.CalibrateCO2;
 import ru.clevertec.AQS.monitor.protocol.out.ReadData;
 import ru.clevertec.AQS.monitor.protocol.out.ResetStorage;
 import ru.clevertec.AQS.monitor.protocol.out.Sync;
 import ru.clevertec.AQS.storage.Database;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
 import java.util.TimeZone;
 import java.util.UUID;
 
@@ -68,8 +77,6 @@ public class BluetoothChatService {
     private final Context mContext;
     private final BluetoothAdapter mAdapter;
     private final Handler mHandler;
-    private AcceptThread mSecureAcceptThread;
-    private AcceptThread mInsecureAcceptThread;
     private ConnectThread mConnectThread;
     private ConnectedThread mConnectedThread;
     private int mState;
@@ -133,15 +140,6 @@ public class BluetoothChatService {
             mConnectedThread = null;
         }
 
-        // Start the thread to listen on a BluetoothServerSocket
-        if (mSecureAcceptThread == null) {
-            mSecureAcceptThread = new AcceptThread(true);
-            mSecureAcceptThread.start();
-        }
-        if (mInsecureAcceptThread == null) {
-            mInsecureAcceptThread = new AcceptThread(false);
-            mInsecureAcceptThread.start();
-        }
         // Update UI title
         updateUserInterfaceTitle();
     }
@@ -198,16 +196,6 @@ public class BluetoothChatService {
             mConnectedThread = null;
         }
 
-        // Cancel the accept thread because we only want to connect to one device
-        if (mSecureAcceptThread != null) {
-            mSecureAcceptThread.cancel();
-            mSecureAcceptThread = null;
-        }
-        if (mInsecureAcceptThread != null) {
-            mInsecureAcceptThread.cancel();
-            mInsecureAcceptThread = null;
-        }
-
         // Start the thread to manage the connection and perform transmissions
         mConnectedThread = new ConnectedThread(socket, socketType);
         mConnectedThread.start();
@@ -238,15 +226,6 @@ public class BluetoothChatService {
             mConnectedThread = null;
         }
 
-        if (mSecureAcceptThread != null) {
-            mSecureAcceptThread.cancel();
-            mSecureAcceptThread = null;
-        }
-
-        if (mInsecureAcceptThread != null) {
-            mInsecureAcceptThread.cancel();
-            mInsecureAcceptThread = null;
-        }
         mState = STATE_NONE;
         // Update UI title
         updateUserInterfaceTitle();
@@ -336,92 +315,13 @@ public class BluetoothChatService {
         BluetoothChatService.this.start();
     }
 
-
-    /**
-     * This thread runs while listening for incoming connections. It behaves
-     * like a server-side client. It runs until a connection is accepted
-     * (or until cancelled).
-     */
-    private class AcceptThread extends Thread {
-        // The local server socket
-        private final BluetoothServerSocket mmServerSocket;
-        private String mSocketType;
-
-        public AcceptThread(boolean secure) {
-            BluetoothServerSocket tmp = null;
-            mSocketType = secure ? "Secure" : "Insecure";
-
-            // Create a new listening server socket
-            try {
-                if (secure) {
-                    tmp = mAdapter.listenUsingRfcommWithServiceRecord(NAME_SECURE,
-                            MY_UUID_SECURE);
-                } else {
-                    tmp = mAdapter.listenUsingInsecureRfcommWithServiceRecord(
-                            NAME_INSECURE, MY_UUID_INSECURE);
-                }
-            } catch (IOException e) {
-                Log.e(TAG, "Socket Type: " + mSocketType + "listen() failed", e);
-            }
-            mmServerSocket = tmp;
-            mState = STATE_LISTEN;
-        }
-
-        public void run() {
-            Log.d(TAG, "Socket Type: " + mSocketType +
-                    "BEGIN mAcceptThread" + this);
-            setName("AcceptThread" + mSocketType);
-
-            BluetoothSocket socket = null;
-
-            // Listen to the server socket if we're not connected
-            while (mState != STATE_CONNECTED) {
-                try {
-                    // This is a blocking call and will only return on a
-                    // successful connection or an exception
-                    socket = mmServerSocket.accept();
-                } catch (IOException e) {
-                    Log.e(TAG, "Socket Type: " + mSocketType + "accept() failed", e);
-                    break;
-                }
-
-                // If a connection was accepted
-                if (socket != null) {
-                    synchronized (BluetoothChatService.this) {
-                        switch (mState) {
-                            case STATE_LISTEN:
-                            case STATE_CONNECTING:
-                                // Situation normal. Start the connected thread.
-                                connected(socket, socket.getRemoteDevice(),
-                                        mSocketType);
-                                break;
-                            case STATE_NONE:
-                            case STATE_CONNECTED:
-                                // Either not ready or already connected. Terminate new socket.
-                                try {
-                                    socket.close();
-                                } catch (IOException e) {
-                                    Log.e(TAG, "Could not close unwanted socket", e);
-                                }
-                                break;
-                        }
-                    }
-                }
-            }
-            Log.i(TAG, "END mAcceptThread, socket Type: " + mSocketType);
-
-        }
-
-        public void cancel() {
-            Log.d(TAG, "Socket Type" + mSocketType + "cancel " + this);
-            try {
-                mmServerSocket.close();
-            } catch (IOException e) {
-                Log.e(TAG, "Socket Type" + mSocketType + "close() of server failed", e);
-            }
-        }
+    public void exportToFile() {
+        new ExportThread().start();
     }
 
+    public void calibrateCO2() {
+        write(new CalibrateCO2().getBytes());
+    }
 
     /**
      * This thread runs while attempting to make an outgoing connection
@@ -511,7 +411,7 @@ public class BluetoothChatService {
         private final OutputStream mmOutStream;
 
         //todo: think how to avoid such big memory allocation (needed to accumulate data for a day)
-        private final byte[] mmRecBuf = new byte[200000];
+        private final byte[] mmRecBuf = new byte[300000];
         private int mmRecBufLen = 0;
         private long lastReadMillis;
 
@@ -626,6 +526,22 @@ public class BluetoothChatService {
         private void processCommand(InCommand incmd) {
             if (incmd instanceof DataTransfer) {
                 saveData((DataTransfer)incmd);
+            } else if (incmd instanceof Status) {
+                Status statusCmd = (Status)incmd;
+                AppStorage.setLastLogIndex(mContext, statusCmd.getLogIdx());
+                Database db = Database.getDatabase(mContext);
+                if (statusCmd.getLogIdx() == db.getDLogDao().getLastId() + 1) {
+                    //we have all previous records stored and now receive the next, just store it
+                    ru.clevertec.AQS.storage.DLog dlogst = new ru.clevertec.AQS.storage.DLog();
+                    dlogst.id = statusCmd.getLogIdx();
+                    dlogst.rtime = UnixTimeUtils.getCurrentUnixTime();
+                    dlogst.fillValuesFromData(statusCmd.getData());
+                    db.getDLogDao().insertAll(dlogst);
+                    mHandler.obtainMessage(Constants.MESSAGE_DATA_UPDATED).sendToTarget();
+                } else {
+                    //we're missing records, request all we're missing
+                    readData();
+                }
             }
 
             mHandler.obtainMessage(Constants.MESSAGE_READ, incmd).sendToTarget();
@@ -635,6 +551,9 @@ public class BluetoothChatService {
         {
             int fromIdx = Database.getDatabase(mContext).getDLogDao().getLastId() + 1;
             int toIdx = AppStorage.getLastLogIndex(mContext);
+/*            if (toIdx - fromIdx > 500) {
+                toIdx = fromIdx + 500;
+            }*/
             writeCommand(
                     new ReadData(fromIdx, toIdx).getBytes(),
                     String.format("Read data %d-%d sent", fromIdx, toIdx));
@@ -643,6 +562,7 @@ public class BluetoothChatService {
         public void resetLocalStorage() {
             Database.getDatabase(mContext).getDLogDao().wipe();
         }
+
         private void saveData(DataTransfer d) {
             int timediff = 0;
             int prevssecs = -1;
@@ -668,7 +588,7 @@ public class BluetoothChatService {
                     }
                     dlog.setRTime(dlog.getSSecs() + timediff);
                 }
-                if (prevssecs >= 0 && prevssecs > dlog.getSSecs()) {
+                if (prevssecs >= 0 && prevssecs < dlog.getSSecs()) {
                     //since we're going backwards through the records, the ssecs should typically be decreasing
                     //once it increases, this means we encounter on-off-on transition (that is, the sensor was turned off then back on)
                     //this resets ssecs to 0, and this means that our calculated timediff value is wrong, so discard it
@@ -685,46 +605,8 @@ public class BluetoothChatService {
                 }
             }
 
-/*          //todo: remove this code for saving to plain files, and don't forget to remove the permission from the manifest
-            File exst = Environment.getExternalStorageDirectory();
-            File dir = new File(exst.getAbsolutePath()+ "/AQS/");
-            if (!dir.exists()) {
-                if (!dir.mkdirs()) {
-                    Log.e(TAG, String.format("Directory %s not created for file", dir.getAbsolutePath()));
-                    return;
-                }
-            }
-            String filename = String.format("%06d-%06d", d.getFromIdx(), d.getToIdx());
-            File file = new File(dir, filename);
-            try {
-                file.createNewFile();
-                FileOutputStream fOut = new FileOutputStream(file);
-                OutputStreamWriter writer = new OutputStreamWriter(fOut);
-                SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-                for (int i=0; i<d.getDLogs().length; i++) {
-                    DLog dlog = d.getDLogs()[i];
-                    if (dlog.getRTime() >= 1548000000) { //do not write records with incorrect rtime
-                        String str = String.format("%s\t%.2f\t%.2f\t%d\t%d\t%d\t%d\t%d\r\n",
-                                sdf.format(new Date(dlog.getRTime() * 1000L)),
-                                dlog.getData().getTemperature(),
-                                dlog.getData().getHumidity(),
-                                dlog.getData().getCO2(),
-                                dlog.getData().getTVOC(),
-                                dlog.getData().getPM1(),
-                                dlog.getData().getPM25(),
-                                dlog.getData().getPM10());
-                        writer.append(str);
-                    }
-                }
-                writer.close();
-                fOut.flush();
-                fOut.close();
-
-            } catch (IOException e) {
-                Log.e(TAG, String.format("Can't write to file %s in %s", filename, dir.getAbsolutePath()), e);
-            }
-            */
+            Message msg = mHandler.obtainMessage(Constants.MESSAGE_DATA_UPDATED);
+            mHandler.sendMessage(msg);
         }
 
         /**
@@ -759,6 +641,73 @@ public class BluetoothChatService {
                 mmSocket.close();
             } catch (IOException e) {
                 Log.e(TAG, "close() of connect socket failed", e);
+            }
+        }
+
+        public void calibrateCO2() {
+        }
+    }
+
+    private class ExportThread extends Thread {
+
+        @Override
+        public void run() {
+            List<ru.clevertec.AQS.storage.DLog> dlogs = Database.getDatabase(mContext).getDLogDao().getAll();
+            File exst = Environment.getExternalStorageDirectory();
+            File dir = new File(exst.getAbsolutePath()+ "/AQS/");
+            if (!dir.exists()) {
+                if (!dir.mkdirs()) {
+                    Log.e(TAG, String.format("Directory %s not created for file", dir.getAbsolutePath()));
+                    return;
+                }
+            }
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            SimpleDateFormat sdff = new SimpleDateFormat("yyyyMMddHHmmss");
+            String filename = sdff.format(new Date());
+            File file = new File(dir, filename.replace(' ','_'));
+            try {
+                file.createNewFile();
+                FileOutputStream fOut = new FileOutputStream(file);
+                OutputStreamWriter writer = new OutputStreamWriter(fOut);
+                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+                Message msg = mHandler.obtainMessage(Constants.MESSAGE_TOAST);
+                Bundle bundle = new Bundle();
+                bundle.putString(Constants.TOAST, "Start exporting data");
+                msg.setData(bundle);
+                mHandler.sendMessage(msg);
+
+                for (ru.clevertec.AQS.storage.DLog dlog : dlogs) {
+                    String str = String.format("%s\t%.2f\t%.2f\t%d\t%d\t%d\t%d\t%d\r\n",
+                            sdf.format(new Date(dlog.rtime * 1000L)),
+                            dlog.temp,
+                            dlog.hum,
+                            dlog.co2,
+                            dlog.tvoc,
+                            dlog.pm1,
+                            dlog.pm25,
+                            dlog.pm10);
+                    writer.append(str);
+                }
+                writer.close();
+                fOut.flush();
+                fOut.close();
+
+                String smsg = String.format("Data exported to file %s in %s", filename, dir.getAbsolutePath());
+                msg = mHandler.obtainMessage(Constants.MESSAGE_TOAST);
+                bundle = new Bundle();
+                bundle.putString(Constants.TOAST, smsg);
+                msg.setData(bundle);
+                mHandler.sendMessage(msg);
+
+            } catch (IOException e) {
+                String errormsg = String.format("Can't write to file %s in %s", filename, dir.getAbsolutePath());
+                Log.e(TAG, errormsg, e);
+                Message msg = mHandler.obtainMessage(Constants.MESSAGE_TOAST);
+                Bundle bundle = new Bundle();
+                bundle.putString(Constants.TOAST, errormsg);
+                msg.setData(bundle);
+                mHandler.sendMessage(msg);
             }
         }
 

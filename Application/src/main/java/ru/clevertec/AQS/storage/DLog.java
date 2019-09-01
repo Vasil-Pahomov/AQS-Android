@@ -6,6 +6,8 @@ import android.arch.persistence.room.PrimaryKey;
 import java.util.Date;
 import java.util.TimeZone;
 
+import ru.clevertec.AQS.monitor.protocol.Data;
+
 @Entity
 public class DLog {
     @PrimaryKey
@@ -26,13 +28,17 @@ public class DLog {
         this.id = id;
         this.ssecs = dLog.getSSecs();
         this.rtime = dLog.getRTime();
-        this.temp = dLog.getData().getTemperature();
-        this.hum = dLog.getData().getHumidity();
-        this.co2 = dLog.getData().getCO2();
-        this.pm1 = dLog.getData().getPM1();
-        this.pm25 = dLog.getData().getPM25();
-        this.pm10 = dLog.getData().getPM10();
-        this.tvoc = dLog.getData().getTVOC();
+        return fillValuesFromData(dLog.getData());
+    }
+
+    public DLog fillValuesFromData(Data data) {
+        this.temp = data.getTemperature();
+        this.hum = data.getHumidity();
+        this.co2 = data.getCO2();
+        this.pm1 = data.getPM1();
+        this.pm25 = data.getPM25();
+        this.pm10 = data.getPM10();
+        this.tvoc = data.getTVOC();
         return this;
     }
 
