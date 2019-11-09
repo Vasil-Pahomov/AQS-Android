@@ -82,7 +82,7 @@ public class BluetoothChatFragment extends Fragment {
     private EditText mOutEditText;
     private Button mSendButton;
     private LineChart mChart;
-    private Button mPrevButton, mZoomMinusButton, mUpdateButton, mZoomPlusButton, mNextButton,mSyncButton, mReadButton;
+    private Button mPrevButton, mZoomMinusButton, mUpdateButton, mZoomPlusButton, mNextButton;
     private TextView mStatusTextView;
 
     /**
@@ -136,7 +136,6 @@ public class BluetoothChatFragment extends Fragment {
         mChartEndSec = (System.currentTimeMillis() + TimeZone.getDefault().getRawOffset() + TimeZone.getDefault().getDSTSavings()) / 1000;
 
         setUpChartButtonHandlers();
-        setUpCommandButtonHandlers();
 
         updateChart();
     }
@@ -180,9 +179,6 @@ public class BluetoothChatFragment extends Fragment {
         mUpdateButton = (Button) view.findViewById(R.id.btnUpdate);
         mZoomPlusButton = (Button) view.findViewById(R.id.btnZoomPlus);
         mNextButton = (Button) view.findViewById(R.id.btnNext);
-
-        mSyncButton = (Button) view.findViewById(R.id.btnSync);
-        mReadButton = (Button) view.findViewById(R.id.btnRead);
 
         mStatusTextView = (TextView) view.findViewById(R.id.textViewStatus);
     }
@@ -233,27 +229,6 @@ public class BluetoothChatFragment extends Fragment {
         }
         return true;
 
-    }
-    private void setUpCommandButtonHandlers() {
-
-        mSyncButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (checkConnectionAndInform()) {
-                    mChatService.sync();
-                    Toast.makeText(getContext(), R.string.sent_sync, Toast.LENGTH_LONG).show();
-                }
-            }
-        });
-
-        mReadButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (checkConnectionAndInform()) {
-                    mChatService.readData();
-                }
-            }
-        });
     }
 
     /**
@@ -324,6 +299,7 @@ public class BluetoothChatFragment extends Fragment {
                     switch (msg.arg1) {
                         case BluetoothChatService.STATE_CONNECTED:
                             setStatus(getString(R.string.title_connected_to, mConnectedDeviceName));
+                            mChatService.sync();
                             break;
                         case BluetoothChatService.STATE_CONNECTING:
                             setStatus(R.string.title_connecting);

@@ -551,9 +551,9 @@ public class BluetoothChatService {
         {
             int fromIdx = Database.getDatabase(mContext).getDLogDao().getLastId() + 1;
             int toIdx = AppStorage.getLastLogIndex(mContext);
-/*            if (toIdx - fromIdx > 500) {
-                toIdx = fromIdx + 500;
-            }*/
+            if (toIdx - fromIdx > 5000) {
+                toIdx = fromIdx + 4999;
+            }
             writeCommand(
                     new ReadData(fromIdx, toIdx).getBytes(),
                     String.format("Read data %d-%d sent", fromIdx, toIdx));
