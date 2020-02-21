@@ -23,6 +23,7 @@ public class DLog {
     public int pm25;
     public int pm10;
     public int tvoc;
+    public int rad;
 
     public DLog fillFromProtocol(int id, ru.clevertec.AQS.monitor.protocol.DLog dLog) {
         this.id = id;
@@ -39,6 +40,7 @@ public class DLog {
         this.pm25 = data.getPM25();
         this.pm10 = data.getPM10();
         this.tvoc = data.getTVOC();
+        this.rad = data.getRad();
         return this;
     }
 

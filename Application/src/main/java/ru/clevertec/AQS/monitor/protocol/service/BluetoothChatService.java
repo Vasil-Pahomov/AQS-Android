@@ -551,6 +551,14 @@ public class BluetoothChatService {
         {
             int fromIdx = Database.getDatabase(mContext).getDLogDao().getLastId() + 1;
             int toIdx = AppStorage.getLastLogIndex(mContext);
+            if (toIdx <= fromIdx) {
+                Message msg = mHandler.obtainMessage(Constants.MESSAGE_TOAST);
+                Bundle bundle = new Bundle();
+                bundle.putString(Constants.TOAST, "Wrong range, memory clearing recommended");
+                msg.setData(bundle);
+                mHandler.sendMessage(msg);
+                return;
+            }
             if (toIdx - fromIdx > 5000) {
                 toIdx = fromIdx + 4999;
             }

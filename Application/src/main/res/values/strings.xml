@@ -54,5 +54,6 @@
     <string name="datatype_CO2">CO2</string>
     <string name="datatype_TVOC">TVOC</string>
     <string name="datatype_PM">PM</string>
+    <string name="datatype_RADIATION">Radiation</string>
 
 </resources>

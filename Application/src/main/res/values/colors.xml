@@ -8,5 +8,6 @@
     <color name="datatype_PM1">#505050</color>
     <color name="datatype_PM25">#707070</color>
     <color name="datatype_PM10">#909090</color>
+    <color name="datatype_RADIATION">#808000</color>
 
 </resources>

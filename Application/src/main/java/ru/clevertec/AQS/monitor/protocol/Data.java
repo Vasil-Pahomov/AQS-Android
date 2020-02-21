@@ -5,7 +5,7 @@ import java.nio.ByteOrder;
 
 public class Data {
 
-    public static final int DataLength = 14;
+    public static final int DataLength = 16;
 
     private int temp;
     private int hum;
@@ -14,6 +14,7 @@ public class Data {
     private int pm25;
     private int pm10;
     private int tvoc;
+    private int rad;
 
     public Data(byte[] buffer, int pos) {
         ByteBuffer bb = ByteBuffer.wrap(buffer, pos, buffer.length-pos);
@@ -33,6 +34,7 @@ public class Data {
         pm25 = bb.getShort();
         pm10 = bb.getShort();
         tvoc = bb.getShort();
+        rad = bb.getShort();
     }
 
     public float getTemperature() {
@@ -58,9 +60,10 @@ public class Data {
     public int getPM10() {
         return pm10;
     }
+
     public int getTVOC() {
         return tvoc;
     }
 
-
+    public int getRad() { return rad; }
 }

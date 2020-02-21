@@ -501,6 +501,9 @@ public class BluetoothChatFragment extends Fragment {
                     entriesL2.add(e1 = new Entry(time, dlog.pm25));
                     entriesL3.add(e2 = new Entry(time, dlog.pm10));
                     break;
+                case RADIATION:
+                    entriesL1.add(e = new Entry(time, dlog.rad));
+                    break;
             }
 
             if (e != null) {
@@ -538,6 +541,9 @@ public class BluetoothChatFragment extends Fragment {
                     entriesR1.add(e = new Entry(time, dlog.pm1));
                     entriesR2.add(e1 = new Entry(time, dlog.pm25));
                     entriesR3.add(e2 = new Entry(time, dlog.pm10));
+                    break;
+                case RADIATION:
+                    entriesR1.add(e = new Entry(time, dlog.rad));
                     break;
             }
             if (e != null) {

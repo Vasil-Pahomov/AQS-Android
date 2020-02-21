@@ -8,7 +8,8 @@ public enum DataType {
     HUMIDITY,
     CO2,
     TVOC,
-    PM;
+    PM,
+    RADIATION;
 
     public String getDisplayName(Context context) {
         Resources res = context.getResources();
@@ -28,6 +29,8 @@ public enum DataType {
                 return 0F;
             case PM:
                 return 0F;
+            case RADIATION:
+                return 0F;
             default:
                 return 0F;
         }
@@ -45,6 +48,8 @@ public enum DataType {
                 return 200F;
             case PM:
                 return 200F;
+            case RADIATION:
+                return 300F;
             default:
                 return 1F;
         }

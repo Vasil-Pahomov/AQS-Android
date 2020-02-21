@@ -49,7 +49,7 @@ public class SettingsActivity extends Activity {
             }
         });
 
-        ArrayAdapter<DataType> typesAdapter = new ArrayAdapter<DataType>(this, android.R.layout.simple_list_item_1);
+        ArrayAdapter<DataType> typesAdapter = new ArrayAdapter<DataType>(this, R.layout.settings_spinner_chart_item);
         mFirstGraphSpinner.setAdapter(typesAdapter);
         mSecondGraphSpinner.setAdapter(typesAdapter);
 
